@@ -5,7 +5,7 @@ from impacket.dcerpc.v5 import transport
 from impacket.dcerpc.v5 import rpcrt
 
 # Others
-import time, argparse, sys, re
+import time, argparse, sys, re, datetime, base64
 from impacket.dcerpc.v5.ndr import NULL
 from impacket import uuid
 from io import StringIO
@@ -21,7 +21,7 @@ def listEndpoints(ip):
   ###
   # Does not require administrative rights
   ###
-  
+
   # Connect to the interface
   rpctransport = transport.DCERPCTransportFactory(r'ncacn_ip_tcp:%s' % ip)
   dce = rpctransport.get_dce_rpc()
@@ -123,7 +123,7 @@ def getOSArch(ip):
   ###
   # Does not require administrative rights
   ###
-  
+
   print("[+] Getting Windows OS architecture (x86/x64)")
 
   # Connect to the interface
@@ -149,11 +149,11 @@ def getOSArch(ip):
 
 from impacket.dcerpc.v5 import scmr
 
-def RCESVCCTL(ip, user, pwd, domain, lmhash, nthash, aesKey, cmd, unauthTransport = False, unauthBinding = False, alternateBinding = None):
+def RCESVCCTL(ip, user, pwd, domain, lmhash, nthash, aesKey, cmd, unauthTransport = False, unauthBinding = False, alternateBinding = None, alternateInterface = None):
   ###
   # Require administrative rights
   ###
-  
+
   print("[+] Executing command")
 
   try:
@@ -166,7 +166,10 @@ def RCESVCCTL(ip, user, pwd, domain, lmhash, nthash, aesKey, cmd, unauthTranspor
       rpctransport.set_credentials(user, pwd, domain, lmhash, nthash, aesKey)
     dce = rpctransport.get_dce_rpc()
     dce.connect()
-    dce.bind(uuid.uuidtup_to_bin(('367ABB81-9844-35F1-AD32-98F038001003', '2.0')))
+    if alternateInterface == None:
+      dce.bind(uuid.uuidtup_to_bin(('367ABB81-9844-35F1-AD32-98F038001003', '2.0')))
+    else:
+      dce.bind(uuid.uuidtup_to_bin(tuple(alternateInterface.split(":"))))
 
     # Query methods of the interface
     SERVICENAME = "MyService" + "\x00"
@@ -228,13 +231,13 @@ def RCESVCCTL(ip, user, pwd, domain, lmhash, nthash, aesKey, cmd, unauthTranspor
     else:
       print(f"\t[-] Got error: {str(e)}")
 
-def startService(ip, user, pwd, domain, lmhash, nthash, aesKey, serviceName, unauthTransport = False, unauthBinding = False, alternateBinding = None):
+def startService(ip, user, pwd, domain, lmhash, nthash, aesKey, serviceName, unauthTransport = False, unauthBinding = False, alternateBinding = None, alternateInterface = None):
   ###
   # Require administrative rights
   ###
-  
+
   print("[+] Starting '%s' service on remote host" % serviceName)
-  
+
   try:
     # Connect to the interface
     if alternateBinding == None:
@@ -245,7 +248,10 @@ def startService(ip, user, pwd, domain, lmhash, nthash, aesKey, serviceName, una
       rpctransport.set_credentials(user, pwd, domain, lmhash, nthash, aesKey)
     dce = rpctransport.get_dce_rpc()
     dce.connect()
-    dce.bind(uuid.uuidtup_to_bin(('367ABB81-9844-35F1-AD32-98F038001003', '2.0')))
+    if alternateInterface == None:
+      dce.bind(uuid.uuidtup_to_bin(('367ABB81-9844-35F1-AD32-98F038001003', '2.0')))
+    else:
+      dce.bind(uuid.uuidtup_to_bin(tuple(alternateInterface.split(":"))))
 
     # Query methods of the interface
     SERVICENAME = serviceName + "\x00"
@@ -270,7 +276,7 @@ def startService(ip, user, pwd, domain, lmhash, nthash, aesKey, serviceName, una
         print("\t[+] Service started")
       else:
         print('\t[-] Unknown service state 0x%x - Aborting' % res['CurrentState'])
-        return False  
+        return False
     return True
   except Exception as e:
     if (str(e).find("rpc_s_access_denied") != -1):
@@ -279,14 +285,14 @@ def startService(ip, user, pwd, domain, lmhash, nthash, aesKey, serviceName, una
       print(f"\t[-] Got error: {str(e)}")
     return False
 
-def listServices(ip, user, pwd, domain, lmhash, nthash, aesKey, unauthTransport = False, unauthBinding = False, alternateBinding = None):
+def listServices(ip, user, pwd, domain, lmhash, nthash, aesKey, unauthTransport = False, unauthBinding = False, alternateBinding = None, alternateInterface = None):
   ###
   # Require administrative rights
   # Services runned by domain users => Password stored into LSA Secrets
   ###
-  
+
   print("[+] Listing services on remote host")
-  
+
   try:
     # Connect to the interface
     if alternateBinding == None:
@@ -297,7 +303,10 @@ def listServices(ip, user, pwd, domain, lmhash, nthash, aesKey, unauthTransport 
       rpctransport.set_credentials(user, pwd, domain, lmhash, nthash, aesKey)
     dce = rpctransport.get_dce_rpc()
     dce.connect()
-    dce.bind(uuid.uuidtup_to_bin(('367ABB81-9844-35F1-AD32-98F038001003', '2.0')))
+    if alternateInterface == None:
+      dce.bind(uuid.uuidtup_to_bin(('367ABB81-9844-35F1-AD32-98F038001003', '2.0')))
+    else:
+      dce.bind(uuid.uuidtup_to_bin(tuple(alternateInterface.split(":"))))
 
     # Query methods of the interface
     res = scmr.hROpenSCManagerW(dce)
@@ -385,11 +394,11 @@ XML_TEMPLATE = """<?xml version="1.0" encoding="UTF-16"?>
 </Task>
         """
 
-def RCEITaskSchedulerService(ip, user, pwd, domain, lmhash, nthash, aesKey, cmd, unauthTransport = False, unauthBinding = False, alternateBinding = None):
+def RCEITaskSchedulerService(ip, user, pwd, domain, lmhash, nthash, aesKey, cmd, unauthTransport = False, unauthBinding = False, alternateBinding = None, alternateInterface = None):
   ###
   # Require administrative rights
   ###
-  
+
   print("[+] Executing command")
 
   try:
@@ -404,7 +413,10 @@ def RCEITaskSchedulerService(ip, user, pwd, domain, lmhash, nthash, aesKey, cmd,
     dce.connect()
     if not unauthBinding:
       dce.set_credentials(*rpctransport.get_credentials())
-    dce.bind(uuid.uuidtup_to_bin(('86D35949-83C9-4044-B424-DB363231FD0C', '1.0')))
+    if alternateInterface == None:
+      dce.bind(uuid.uuidtup_to_bin(('86D35949-83C9-4044-B424-DB363231FD0C', '1.0')))
+    else:
+      dce.bind(uuid.uuidtup_to_bin(tuple(alternateInterface.split(":"))))
 
     # Query methods of the interface
     TASKNAME = '\\MyTask'
@@ -426,13 +438,13 @@ def RCEITaskSchedulerService(ip, user, pwd, domain, lmhash, nthash, aesKey, cmd,
       print(f"\t[-] Access denied")
     else:
       print(f"\t[-] Got error: {str(e)}")
-  
-def listScheduledTasks(ip, user, pwd, domain, lmhash, nthash, aesKey, unauthTransport = False, unauthBinding = False, alternateBinding = None):
+
+def listScheduledTasks(ip, user, pwd, domain, lmhash, nthash, aesKey, unauthTransport = False, unauthBinding = False, alternateBinding = None, alternateInterface = None):
   ###
   # Require administrative rights
   # Scheduled Tasks with Logon Type = Password => Password stored into Vault Credential Manager
   ###
-  
+
   print("[+] Listing scheduled tasks on remote host")
 
   try:
@@ -447,7 +459,10 @@ def listScheduledTasks(ip, user, pwd, domain, lmhash, nthash, aesKey, unauthTran
     dce.connect()
     if not unauthBinding:
       dce.set_credentials(*rpctransport.get_credentials())
-    dce.bind(uuid.uuidtup_to_bin(('86D35949-83C9-4044-B424-DB363231FD0C', '1.0')))
+    if alternateInterface == None:
+      dce.bind(uuid.uuidtup_to_bin(('86D35949-83C9-4044-B424-DB363231FD0C', '1.0')))
+    else:
+      dce.bind(uuid.uuidtup_to_bin(tuple(alternateInterface.split(":"))))
 
     # Query methods of the interface
     # Blacklisted folders (Default ones)
@@ -494,11 +509,11 @@ def listScheduledTasks(ip, user, pwd, domain, lmhash, nthash, aesKey, unauthTran
 
 from impacket.dcerpc.v5 import atsvc
 
-def RCEATSVC(ip, user, pwd, domain, lmhash, nthash, aesKey, cmd, unauthTransport = False, unauthBinding = False, alternateBinding = None):
+def RCEATSVC(ip, user, pwd, domain, lmhash, nthash, aesKey, cmd, unauthTransport = False, unauthBinding = False, alternateBinding = None, alternateInterface = None):
   ###
   # Require administrative rights
   ###
-  
+
   print("[+] Executing command")
 
   try:
@@ -513,7 +528,10 @@ def RCEATSVC(ip, user, pwd, domain, lmhash, nthash, aesKey, cmd, unauthTransport
     dce.connect()
     if not unauthBinding:
       dce.set_credentials(*rpctransport.get_credentials())
-    dce.bind(uuid.uuidtup_to_bin(('1FF70682-0A51-30E8-076D-740BE8CEE98B', '1.0')))
+    if alternateInterface == None:
+      dce.bind(uuid.uuidtup_to_bin(('1FF70682-0A51-30E8-076D-740BE8CEE98B', '1.0')))
+    else:
+      dce.bind(uuid.uuidtup_to_bin(tuple(alternateInterface.split(":"))))
 
     # Query methods of the interface
     serverName = atsvc.ATSVC_HANDLE()
@@ -524,10 +542,7 @@ def RCEATSVC(ip, user, pwd, domain, lmhash, nthash, aesKey, cmd, unauthTransport
     AtInfo['DaysOfWeek'] = 0xff
     AtInfo['Flags'] = 0b00010100
     AtInfo['Command'] = "cmd.exe /c " + cmd + "\x00"
-    try:
-      res = atsvc.hNetrJobAdd(dce, serverName, AtInfo)
-    except Exception as e:
-      print("\t[-] Got error: %s" % str(e))
+    res = atsvc.hNetrJobAdd(dce, serverName, AtInfo)
   except Exception as e:
     if (str(e).find("rpc_s_access_denied") != -1):
       print(f"\t[-] Access denied")
@@ -568,7 +583,7 @@ def RCEDCOM1(ip, user, pwd, domain, lmhash, nthash, aesKey, cmd, unauthTransport
   ###
   # Require administrative rights
   ###
-  
+
   print("[+] Executing command")
 
   try:
@@ -717,7 +732,7 @@ def RCEDCOM2(ip, user, pwd, domain, lmhash, nthash, aesKey, cmd, unauthTransport
   ###
   # Require administrative rights
   ###
-  
+
   print("[+] Executing command")
 
   try:
@@ -842,11 +857,11 @@ def listRDSSessions(ip, user, pwd, domain, lmhash, nthash, aesKey, unauthTranspo
     else:
       print(f"\t[-] Got error: {str(e)}")
 
-def listProcesses(ip, user, pwd, domain, lmhash, nthash, aesKey, unauthTransport = False, unauthBinding = False, alternateBinding = None):
+def listProcesses(ip, user, pwd, domain, lmhash, nthash, aesKey, unauthTransport = False, unauthBinding = False, alternateBinding = None, alternateInterface = None):
   ###
   # Require administrative rights
   ###
-  
+
   print("[+] Listing running processes")
 
   try:
@@ -860,7 +875,10 @@ def listProcesses(ip, user, pwd, domain, lmhash, nthash, aesKey, unauthTransport
     dce = rpctransport.get_dce_rpc()
     dce.connect()
     dce.set_auth_level(rpcrt.RPC_C_AUTHN_LEVEL_PKT_PRIVACY)
-    dce.bind(uuid.uuidtup_to_bin(('5ca4a760-ebb1-11cf-8611-00a0245420ed', '1.0')))
+    if alternateInterface == None:
+      dce.bind(uuid.uuidtup_to_bin(('5ca4a760-ebb1-11cf-8611-00a0245420ed', '1.0')))
+    else:
+      dce.bind(uuid.uuidtup_to_bin(tuple(alternateInterface.split(":"))))
 
     # Query methods of the interface
     handle = tsts.hRpcWinStationOpenServer(dce)
@@ -882,12 +900,12 @@ def listProcesses(ip, user, pwd, domain, lmhash, nthash, aesKey, unauthTransport
 
 from impacket.dcerpc.v5 import srvs
 
-def listSessions(ip, user, pwd, domain, lmhash, nthash, aesKey, unauthTransport = False, unauthBinding = False, alternateBinding = None):
+def listSessions(ip, user, pwd, domain, lmhash, nthash, aesKey, unauthTransport = False, unauthBinding = False, alternateBinding = None, alternateInterface = None):
   ###
   # Does not require administrative rights
   # BUT will display only our session
   ###
-  
+
   print("[+] Listing sessions on remote host")
 
   try:
@@ -900,7 +918,10 @@ def listSessions(ip, user, pwd, domain, lmhash, nthash, aesKey, unauthTransport 
       rpctransport.set_credentials(user, pwd, domain, lmhash, nthash, aesKey)
     dce = rpctransport.get_dce_rpc()
     dce.connect()
-    dce.bind(uuid.uuidtup_to_bin(('4B324FC8-1670-01D3-1278-5A47BF6EE188', '3.0')))
+    if alternateInterface == None:
+      dce.bind(uuid.uuidtup_to_bin(('4B324FC8-1670-01D3-1278-5A47BF6EE188', '3.0')))
+    else:
+      dce.bind(uuid.uuidtup_to_bin(tuple(alternateInterface.split(":"))))
 
     # Query methods of the interface
     res = srvs.hNetrSessionEnum(dce, '\x00', NULL, 10)
@@ -923,11 +944,11 @@ def listSessions(ip, user, pwd, domain, lmhash, nthash, aesKey, unauthTransport 
 
 from impacket.dcerpc.v5 import wkst
 
-def listLoggedIn(ip, user, pwd, domain, lmhash, nthash, aesKey, unauthTransport = False, unauthBinding = False, alternateBinding = None):
+def listLoggedIn(ip, user, pwd, domain, lmhash, nthash, aesKey, unauthTransport = False, unauthBinding = False, alternateBinding = None, alternateInterface = None):
   ###
   # Require administrative rights
   ###
-  
+
   print("[+] Listing logged in users on remote host")
 
   try:
@@ -940,7 +961,10 @@ def listLoggedIn(ip, user, pwd, domain, lmhash, nthash, aesKey, unauthTransport 
       rpctransport.set_credentials(user, pwd, domain, lmhash, nthash, aesKey)
     dce = rpctransport.get_dce_rpc()
     dce.connect()
-    dce.bind(uuid.uuidtup_to_bin(('6BFFD098-A112-3610-9833-46C3F87E345A', '1.0')))
+    if alternateInterface == None:
+      dce.bind(uuid.uuidtup_to_bin(('6BFFD098-A112-3610-9833-46C3F87E345A', '1.0')))
+    else:
+      dce.bind(uuid.uuidtup_to_bin(tuple(alternateInterface.split(":"))))
 
     # Query methods of the interface
     res = wkst.hNetrWkstaUserEnum(dce, 1)
@@ -1071,10 +1095,10 @@ def extractKeys(cmd):
   words = re.findall(pattern, cmd)
   # Remove single quotes from extracted words
   words = [word.strip("'") for word in words]
-  
+
   return words
 
-def regCTL(ip, user, pwd, domain, lmhash, nthash, aesKey, cmd, unauthTransport = False, unauthBinding = False, alternateBinding = None):
+def regCMD(ip, user, pwd, domain, lmhash, nthash, aesKey, cmd, unauthTransport = False, unauthBinding = False, alternateBinding = None, alternateInterface = None):
   ###
   # Does not require administrative rights
   # The service 'RemoteRegistry' expose the WINREG interface through ncacn_np:<IP>[\pipe\winreg]
@@ -1083,7 +1107,7 @@ def regCTL(ip, user, pwd, domain, lmhash, nthash, aesKey, cmd, unauthTransport =
   #   1- By using the SVCCTL interface to start directly the service 'RemoteRegistry' (Require administrative rights)
   #   2- By trying to connect to the WINREG interface once in hope that the service 'RemoteRegistry' will be activated automatically after few seconds
   ###
-  
+
   print("[+] Running registry command")
 
   try:
@@ -1111,7 +1135,10 @@ def regCTL(ip, user, pwd, domain, lmhash, nthash, aesKey, cmd, unauthTransport =
           rpctransport.set_credentials(user, pwd, domain, lmhash, nthash, aesKey)
         dce = rpctransport.get_dce_rpc()
         dce.connect()
-        dce.bind(uuid.uuidtup_to_bin(('338CD001-2244-31F1-AAAA-900038001003', '1.0')))
+        if alternateInterface == None:
+          dce.bind(uuid.uuidtup_to_bin(('338CD001-2244-31F1-AAAA-900038001003', '1.0')))
+        else:
+          dce.bind(uuid.uuidtup_to_bin(tuple(alternateInterface.split(":"))))
         print("\t[+] Service already started")
       except Exception as e:
         if str(e).find("STATUS_PIPE_NOT_AVAILABLE") >= 0:
@@ -1130,7 +1157,10 @@ def regCTL(ip, user, pwd, domain, lmhash, nthash, aesKey, cmd, unauthTransport =
       rpctransport.set_credentials(user, pwd, domain, lmhash, nthash, aesKey)
     dce = rpctransport.get_dce_rpc()
     dce.connect()
-    dce.bind(uuid.uuidtup_to_bin(('338CD001-2244-31F1-AAAA-900038001003', '1.0')))
+    if alternateInterface == None:
+      dce.bind(uuid.uuidtup_to_bin(('338CD001-2244-31F1-AAAA-900038001003', '1.0')))
+    else:
+      dce.bind(uuid.uuidtup_to_bin(tuple(alternateInterface.split(":"))))
 
     # Query methods of the interface
     ACTION = cmd.split(" ")[0].upper()
@@ -1333,7 +1363,7 @@ def regDelete(dce, keys):
     else:
       print("\t[-] Unknown option: %s" % option)
 
-def listRegSessions(ip, user, pwd, domain, lmhash, nthash, aesKey, cmd, unauthTransport = False, unauthBinding = False, alternateBinding = None):
+def listRegSessions(ip, user, pwd, domain, lmhash, nthash, aesKey, unauthTransport = False, unauthBinding = False, alternateBinding = None, alternateInterface = None):
   ###
   # Does not require administrative rights
   # The service 'RemoteRegistry' expose the WINREG interface through ncacn_np:<IP>[\pipe\winreg]
@@ -1370,7 +1400,10 @@ def listRegSessions(ip, user, pwd, domain, lmhash, nthash, aesKey, cmd, unauthTr
           rpctransport.set_credentials(user, pwd, domain, lmhash, nthash, aesKey)
         dce = rpctransport.get_dce_rpc()
         dce.connect()
-        dce.bind(uuid.uuidtup_to_bin(('338CD001-2244-31F1-AAAA-900038001003', '1.0')))
+        if alternateInterface == None:
+          dce.bind(uuid.uuidtup_to_bin(('338CD001-2244-31F1-AAAA-900038001003', '1.0')))
+        else:
+          dce.bind(uuid.uuidtup_to_bin(tuple(alternateInterface.split(":"))))
         print("\t[+] Service already started")
       except Exception as e:
         if str(e).find("STATUS_PIPE_NOT_AVAILABLE") >= 0:
@@ -1379,7 +1412,7 @@ def listRegSessions(ip, user, pwd, domain, lmhash, nthash, aesKey, cmd, unauthTr
         else:
           print("\t[-] Got error: %s" % str(e))
           return
-    
+
     # Connect to the interface WINREG
     if alternateBinding == None:
       rpctransport = transport.DCERPCTransportFactory(r'ncacn_np:%s[\pipe\winreg]' % ip)
@@ -1389,8 +1422,11 @@ def listRegSessions(ip, user, pwd, domain, lmhash, nthash, aesKey, cmd, unauthTr
       rpctransport.set_credentials(user, pwd, domain, lmhash, nthash, aesKey)
     dce = rpctransport.get_dce_rpc()
     dce.connect()
-    dce.bind(uuid.uuidtup_to_bin(('338CD001-2244-31F1-AAAA-900038001003', '1.0')))
-    
+    if alternateInterface == None:
+      dce.bind(uuid.uuidtup_to_bin(('338CD001-2244-31F1-AAAA-900038001003', '1.0')))
+    else:
+      dce.bind(uuid.uuidtup_to_bin(tuple(alternateInterface.split(":"))))
+
     # Query methods of the interface
     hRootKey = rrp.hOpenUsers(dce)['phKey']
     index = 1
@@ -1415,6 +1451,113 @@ def listRegSessions(ip, user, pwd, domain, lmhash, nthash, aesKey, cmd, unauthTr
     else:
       print(f"\t[-] Got error: {str(e)}")
 
+def printAllSubkeysAndEntriesSD(dce, keyName, keyHandler, nbTab):
+  index = 0
+  while True:
+    try:
+      subkey = rrp.hBaseRegEnumKey(dce, keyHandler, index)
+      index += 1
+      res = rrp.hBaseRegOpenKey(dce, keyHandler, subkey['lpNameOut'], samDesired = rrp.MAXIMUM_ALLOWED | rrp.KEY_ENUMERATE_SUB_KEYS)
+      newKeyName = keyName + subkey['lpNameOut'][:-1] + '\\'
+      sys.stdout.write('\t' * nbTab + newKeyName + " ")
+      sdBytes = b"".join(rrp.hBaseRegGetKeySecurity(dce, keyHandler, 0x4)['pRpcSecurityDescriptorOut']['lpSecurityDescriptor']) # 0x4 = DACL_SECURITY_INFORMATION
+      print(base64.b64encode(sdBytes).decode())
+      printAllSubkeysAndEntriesSD(dce, newKeyName, res['phkResult'], nbTab + 1)
+    except Exception as e:
+      if str(e).find("ERROR_NO_MORE_ITEMS") >= 0:
+        break
+      elif str(e).find('access_denied') >= 0:
+        print('\t' * nbTab + "[-] Cannot access subkey '%s', bypassing it" % subkey['lpNameOut'][:-1])
+        continue
+      elif str(e).find('rpc_x_bad_stub_data') >= 0:
+        print('\t' * nbTab + "[-] Fault call, cannot retrieve value for '%s', bypassing it" % subkey['lpNameOut'][:-1])
+        return
+      else:
+        raise e
+
+def listRegSD(ip, user, pwd, domain, lmhash, nthash, aesKey, rootKey, unauthTransport = False, unauthBinding = False, alternateBinding = None, alternateInterface = None):
+  ###
+  # Does not require administrative rights
+  # The service 'RemoteRegistry' expose the WINREG interface through ncacn_np:<IP>[\pipe\winreg]
+  # BUT It can be stopped/disabled
+  # Start It first
+  #   1- By using the SVCCTL interface to start directly the service 'RemoteRegistry' (Require administrative rights)
+  #   2- By trying to connect to the WINREG interface once in hope that the service 'RemoteRegistry' will be activated automatically after few seconds
+  ###
+
+  print("[+] Displaying Security Descriptor of registry")
+
+  try:
+    useSVCCTL = False
+    if useSVCCTL:
+      print("\t[+] Starting RemoteRegistry service on remote host through SVCCTL interface")
+      originalSTDOUT = sys.stdout
+      sys.stdout = StringIO()
+      started = startService(ip, user, pwd, domain, lmhash, nthash, aesKey, "RemoteRegistry")
+      sys.stdout = originalSTDOUT
+      if started:
+        print("\t[+] Service RemoteRegistry started")
+      else:
+        print("\t[-] Failed to start RemoteRegistry Service. Exit")
+        return
+    else:
+      print("\t[+] Try to start RemoteRegistry service by connecting to the WINREG interface once")
+      # Connect to the interface WINREG
+      try:
+        if alternateBinding == None:
+          rpctransport = transport.DCERPCTransportFactory(r'ncacn_np:%s[\pipe\winreg]' % ip)
+        else:
+          rpctransport = transport.DCERPCTransportFactory(alternateBinding)
+        if not unauthTransport:
+          rpctransport.set_credentials(user, pwd, domain, lmhash, nthash, aesKey)
+        dce = rpctransport.get_dce_rpc()
+        dce.connect()
+        if alternateInterface == None:
+          dce.bind(uuid.uuidtup_to_bin(('338CD001-2244-31F1-AAAA-900038001003', '1.0')))
+        else:
+          dce.bind(uuid.uuidtup_to_bin(tuple(alternateInterface.split(":"))))
+        print("\t[+] Service already started")
+      except Exception as e:
+        if str(e).find("STATUS_PIPE_NOT_AVAILABLE") >= 0:
+          print("\t[+] Expected error 'STATUS_PIPE_NOT_AVAILABLE'. Waiting few seconds and retry")
+          time.sleep(2)
+        else:
+          print("\t[-] Got error: %s" % str(e))
+          return
+
+    # Connect to the interface WINREG
+    if alternateBinding == None:
+      rpctransport = transport.DCERPCTransportFactory(r'ncacn_np:%s[\pipe\winreg]' % ip)
+    else:
+      rpctransport = transport.DCERPCTransportFactory(alternateBinding)
+    if not unauthTransport:
+      rpctransport.set_credentials(user, pwd, domain, lmhash, nthash, aesKey)
+    dce = rpctransport.get_dce_rpc()
+    dce.connect()
+    if alternateInterface == None:
+      dce.bind(uuid.uuidtup_to_bin(('338CD001-2244-31F1-AAAA-900038001003', '1.0')))
+    else:
+      dce.bind(uuid.uuidtup_to_bin(tuple(alternateInterface.split(":"))))
+
+    # Query methods of the interface
+    if rootKey.upper() == 'HKLM':
+      ans = rrp.hOpenLocalMachine(dce)
+    elif rootKey.upper() == 'HKCU':
+      ans = rrp.hOpenCurrentUser(dce)
+    elif rootKey.upper() == 'HKCR':
+      ans = rrp.hOpenClassesRoot(dce)
+    elif rootKey.upper() == 'HKU':
+      ans = rrp.hOpenUsers(dce)
+    elif rootKey.upper() == 'HKCC':
+      ans = rrp.hOpenCurrentConfig(dce)
+    hRootKey = ans['phKey']
+    printAllSubkeysAndEntriesSD(dce, rootKey + "\\", hRootKey, 1)
+  except Exception as e:
+    if (str(e).find("rpc_s_access_denied") != -1):
+      print(f"\t[-] Access denied")
+    else:
+      print(f"\t[-] Got error: {str(e)}")
+
 ##################################################################################
 ### [MS-LSAT] = Local Security Authority (Translation Methods) Remote Protocol ###
 ###    [MS-LSAD] = Local Security Authority (Domain Policy) Remote Protocol    ###
@@ -1423,11 +1566,11 @@ def listRegSessions(ip, user, pwd, domain, lmhash, nthash, aesKey, cmd, unauthTr
 
 from impacket.dcerpc.v5 import lsat, lsad
 
-def SIDToName(ip, user, pwd, domain, lmhash, nthash, aesKey, SIDString, unauthTransport = False, unauthBinding = False, alternateBinding = None):
+def SIDToName(ip, user, pwd, domain, lmhash, nthash, aesKey, SIDString, unauthTransport = False, unauthBinding = False, alternateBinding = None, alternateInterface = None):
   ###
   # Does not require administrative rights
   ###
-  
+
   print("[+] Lookup name of SID")
 
   try:
@@ -1440,11 +1583,13 @@ def SIDToName(ip, user, pwd, domain, lmhash, nthash, aesKey, SIDString, unauthTr
       rpctransport.set_credentials(user, pwd, domain, lmhash, nthash, aesKey)
     dce = rpctransport.get_dce_rpc()
     dce.connect()
-    dce.bind(uuid.uuidtup_to_bin(('12345778-1234-ABCD-EF00-0123456789AB','0.0')))
+    if alternateInterface == None:
+      dce.bind(uuid.uuidtup_to_bin(('12345778-1234-ABCD-EF00-0123456789AB','0.0')))
+    else:
+      dce.bind(uuid.uuidtup_to_bin(tuple(alternateInterface.split(":"))))
 
     # Query methods of the interface
-    res = lsad.hLsarOpenPolicy2(dce, lsat.POLICY_LOOKUP_NAMES | lsad.MAXIMUM_ALLOWED)
-    policyHandle = res['PolicyHandle']
+    policyHandle = lsad.hLsarOpenPolicy2(dce, lsat.POLICY_LOOKUP_NAMES | lsad.MAXIMUM_ALLOWED)['PolicyHandle']
     try:
       res = lsat.hLsarLookupSids(dce, policyHandle, [SIDString], lsat.LSAP_LOOKUP_LEVEL.enumItems.LsapLookupWksta)
     except Exception as e:
@@ -1469,11 +1614,11 @@ def SIDToName(ip, user, pwd, domain, lmhash, nthash, aesKey, SIDString, unauthTr
     else:
       print(f"\t[-] Got error: {str(e)}")
 
-def NameToSID(ip, user, pwd, domain, lmhash, nthash, aesKey, name, unauthTransport = False, unauthBinding = False, alternateBinding = None):
+def NameToSID(ip, user, pwd, domain, lmhash, nthash, aesKey, name, unauthTransport = False, unauthBinding = False, alternateBinding = None, alternateInterface = None):
   ###
   # Does not require administrative rights
   ###
-  
+
   print("[+] Lookup SID of name")
 
   try:
@@ -1486,33 +1631,63 @@ def NameToSID(ip, user, pwd, domain, lmhash, nthash, aesKey, name, unauthTranspo
       rpctransport.set_credentials(user, pwd, domain, lmhash, nthash, aesKey)
     dce = rpctransport.get_dce_rpc()
     dce.connect()
-    dce.bind(uuid.uuidtup_to_bin(('12345778-1234-ABCD-EF00-0123456789AB','0.0')))
+    if alternateInterface == None:
+      dce.bind(uuid.uuidtup_to_bin(('12345778-1234-ABCD-EF00-0123456789AB','0.0')))
+    else:
+      dce.bind(uuid.uuidtup_to_bin(tuple(alternateInterface.split(":"))))
 
     # Query methods of the interface
-    res = lsad.hLsarOpenPolicy2(dce, lsat.POLICY_LOOKUP_NAMES | lsad.MAXIMUM_ALLOWED)
-    policyHandle = res['PolicyHandle']
+    policyHandle = lsad.hLsarOpenPolicy2(dce, lsat.POLICY_LOOKUP_NAMES | lsad.MAXIMUM_ALLOWED)['PolicyHandle']
     try:
       res = lsat.hLsarLookupNames(dce, policyHandle, [name], lsat.LSAP_LOOKUP_LEVEL.enumItems.LsapLookupWksta)
     except Exception as e:
       if str(e).find('STATUS_NONE_MAPPED') >= 0:
-        print('[-] Name %s lookup failed, return status: STATUS_NONE_MAPPED' % name)
+        print('[-] Name not found')
         return
       else:
         raise e
-    domains = []
+    domainSIDs = []
     for entry in res['ReferencedDomains']['Domains']:
-      domains.append(entry['Name'])
+      domainSIDs.append(entry['Sid'].formatCanonical())
     for entry in res['TranslatedSids']['Sids']:
-      domain = domains[entry['DomainIndex']]
-      if (domain == "BUILTIN"): # Get the local SID
-        domainSid = "S-1-5-32"
-      else: # Get the domain SID
-        res = lsad.hLsarQueryInformationPolicy2(dce, policyHandle, lsad.POLICY_INFORMATION_CLASS.PolicyPrimaryDomainInformation)
-        domainSid =  res['PolicyInformation']['PolicyPrimaryDomainInfo']['Sid'].formatCanonical()
-      SIDString = f"{domainSid}-{entry['RelativeId']}"
+      domainSID = domainSIDs[entry['DomainIndex']]
+      SIDString = f"{domainSID}-{entry['RelativeId']}"
       print(f"\t{name} = {SIDString}")
 
     return SIDString
+  except Exception as e:
+    if (str(e).find("rpc_s_access_denied") != -1):
+      print(f"\t[-] Access denied")
+    else:
+      print(f"\t[-] Got error: {str(e)}")
+
+def NameToSID2(ip, user, pwd, domain, lmhash, nthash, aesKey, name, unauthTransport = False, unauthBinding = False, alternateBinding = None, alternateInterface = None):
+  try:
+    # Connect to the interface
+    if alternateBinding == None:
+      rpctransport = transport.DCERPCTransportFactory(r'ncacn_np:%s[\pipe\lsarpc]' % ip)
+    else:
+      rpctransport = transport.DCERPCTransportFactory(alternateBinding)
+    if not unauthTransport:
+      rpctransport.set_credentials(user, pwd, domain, lmhash, nthash, aesKey)
+    dce = rpctransport.get_dce_rpc()
+    dce.connect()
+    if alternateInterface == None:
+      dce.bind(uuid.uuidtup_to_bin(('12345778-1234-ABCD-EF00-0123456789AB','0.0')))
+    else:
+      dce.bind(uuid.uuidtup_to_bin(tuple(alternateInterface.split(":"))))
+    
+    # Query methods of the interface
+    policyHandle = lsad.hLsarOpenPolicy2(dce)['PolicyHandle']
+    try:
+      res = lsat.hLsarLookupNames3(dce, policyHandle, [name], lsat.LSAP_LOOKUP_LEVEL.enumItems.LsapLookupWksta)
+    except Exception as e:
+      if str(e).find('STATUS_NONE_MAPPED') >= 0:
+        print('[-] Name not found')
+        return
+      else:
+        raise e
+    return res['TranslatedSids']['Sids'][0]['Sid']
   except Exception as e:
     if (str(e).find("rpc_s_access_denied") != -1):
       print(f"\t[-] Access denied")
@@ -1527,51 +1702,101 @@ def NameToSID(ip, user, pwd, domain, lmhash, nthash, aesKey, name, unauthTranspo
 from impacket.dcerpc.v5 import samr
 from impacket.dcerpc.v5.dtypes import RPC_SID
 
-# Local group RID mapping for information
-class DOMAIN_ALIAS_RID():
-	ADMINS = 0x00000220 # A local group used for administration of the domain.
-	USERS = 0x00000221 # A local group that represents all users in the domain.
-	GUESTS = 0x00000222 # A local group that represents guests of the domain.
-	POWER_USERS = 0x00000223 # A local group used to represent a user or set of users who expect to treat a system as if it were their personal computer rather than as a workstation for multiple users.
-	ACCOUNT_OPS = 	0x00000224 # A local group that exists only on systems running server operating systems. This local group permits control over nonadministrator accounts.
-	SYSTEM_OPS = 0x00000225 # A local group that exists only on systems running server operating systems. This local group performs system administrative functions, not including security functions. It establishes network shares, controls printers, unlocks workstations, and performs other operations.
-	PRINT_OPS = 0x00000226 # A local group that exists only on systems running server operating systems. This local group controls printers and print queues.
-	BACKUP_OPS = 0x00000227 # A local group used for controlling assignment of file backup-and-restore privileges.
-	REPLICATOR = 0x00000228 # A local group responsible for copying security databases from the primary domain controller to the backup domain controllers. These accounts are used only by the system.
-	RAS_SERVERS = 0x00000229 # A local group that represents RAS and IAS servers. This group permits access to various attributes of user objects.
-	PREW2KCOMPACCESS = 0x0000022A # A local group that exists only on systems running Windows 2000 Server. For more information, see Allowing Anonymous Access.
-	REMOTE_DESKTOP_USERS = 0x0000022B # A local group that represents all remote desktop users.
-	NETWORK_CONFIGURATION_OPS = 0x0000022C # A local group that represents the network configuration.
-	INCOMING_FOREST_TRUST_BUILDERS = 0x0000022D # A local group that represents any forest trust users.
-	MONITORING_USERS = 0x0000022E # A local group that represents all users being monitored.
-	LOGGING_USERS = 0x0000022F # A local group responsible for logging users.
-	AUTHORIZATIONACCESS = 0x00000230 # A local group that represents all authorized access.
-	TS_LICENSE_SERVERS = 0x00000231 # A local group that exists only on systems running server operating systems that allow for terminal services and remote access.
-	DCOM_USERS = 0x00000232 # A local group that represents users who can use Distributed Component Object Model (DCOM).
-	IUSERS = 0X00000238 # A local group that represents Internet users.
-	CRYPTO_OPERATORS = 0x00000239 # A local group that represents access to cryptography operators.
-	CACHEABLE_PRINCIPALS_GROUP = 0x0000023B # A local group that represents principals that can be cached.
-	NON_CACHEABLE_PRINCIPALS_GROUP = 0x0000023C # A local group that represents principals that cannot be cached.
-	EVENT_LOG_READERS_GROUP = 0x0000023D # A local group that represents event log readers.
-	CERTSVC_DCOM_ACCESS_GROUP = 0x0000023E # The local group of users who can connect to certification authorities using Distributed Component Object Model (DCOM).
-	RDS_REMOTE_ACCESS_SERVERS = 0x0000023F  # A local group that represents RDS remote access servers.
-	RDS_ENDPOINT_SERVERS = 0x00000240 # A local group that represents endpoint servers.
-	RDS_MANAGEMENT_SERVERS = 0x00000241 # A local group that represents management servers.
-	HYPER_V_ADMINS = 0x00000242 # A local group that represents hyper-v admins
-	ACCESS_CONTROL_ASSISTANCE_OPS = 0x00000243 # A local group that represents access control assistance OPS.
-	REMOTE_MANAGEMENT_USERS = 0x00000244 # A local group that represents remote management users.
-	DEFAULT_ACCOUNT = 0x00000245 # A local group that represents the default account.
-	STORAGE_REPLICA_ADMINS = 0x00000246 # A local group that represents storage replica admins.
-	DEVICE_OWNERS = 0x00000247 # A local group that represents can make settings expected for Device Owners.
+def extractKeys(cmd):
+  # Regular expression to match words within single quotes and words without quotes
+  pattern = r"'[^']*'|\S+"
+  # Find all matches using the pattern
+  words = re.findall(pattern, cmd)
+  # Remove single quotes from extracted words
+  words = [word.strip("'") for word in words]
 
+  return words
 
-def getLocalGroupMembers(ip, user, pwd, domain, lmhash, nthash, aesKey, groupRID, unauthTransport = False, unauthBinding = False, alternateBinding = None):
+def openAlias(dce, domainHandle, aliasName):
+  aliasRID = samr.hSamrLookupNamesInDomain(dce, domainHandle, [aliasName])['RelativeIds']['Element'][0]['Data']
+  aliasHandle = samr.hSamrOpenAlias(dce, domainHandle, aliasId = aliasRID)['AliasHandle']
+  return aliasHandle
+
+def openGroup(dce, domainHandle, groupName):
+  groupRID = samr.hSamrLookupNamesInDomain(dce, domainHandle, [groupName])['RelativeIds']['Element'][0]['Data']
+  groupHandle = samr.hSamrOpenGroup(dce, domainHandle, groupId = groupRID)['GroupHandle']
+  return groupHandle
+
+def openUser(dce, domainHandle, userName):
+  userRID = samr.hSamrLookupNamesInDomain(dce, domainHandle, [userName])['RelativeIds']['Element'][0]['Data']
+  userHandle = samr.hSamrOpenUser(dce, domainHandle, userId = userRID)['UserHandle']
+  return userHandle
+
+def openDomain(dce, Builtin = False):
+  index = 1 if Builtin else 0
+  serverHandle = samr.hSamrConnect(dce)['ServerHandle']
+  domainName = samr.hSamrEnumerateDomainsInSamServer(dce, serverHandle)['Buffer']['Buffer'][index]['Name']
+  domainRID = samr.hSamrLookupDomainInSamServer(dce, serverHandle, domainName)['DomainId']
+  domainHandle = samr.hSamrOpenDomain(dce, serverHandle, domainId = domainRID)['DomainHandle']
+  return domainHandle
+
+def getUnixTime(t):
+  t -= 116444736000000000
+  t /= 10000000
+  return t
+
+def getTimeString(large_integer):
+  time = (large_integer['HighPart'] << 32) + large_integer['LowPart']
+  if time == 0 or time == 0x7FFFFFFFFFFFFFFF:
+      time = 'Never'
+  else:
+      time = datetime.datetime.fromtimestamp(getUnixTime(time))
+      time = time.strftime("%m/%d/%Y %H:%M:%S %p")
+  return time
+    
+def formatLogonHours(s):
+  logon_hours = ''.join(map(lambda b: b.hex(), s))
+  if logon_hours == ('f' * 42):
+      logon_hours = "All"
+  return logon_hours
+
+def b2s(b):
+  return "Yes" if b else "No"
+
+def displayAccount(account):
+  print("\tUser name".ljust(30), account['UserName'])
+  print("\tFull name".ljust(30), account['FullName'])
+  print("\tComment".ljust(30), account['AdminComment'])
+  print("\tUser's comment".ljust(30), account['UserComment'])
+  print("\tCountry/region code".ljust(30), "000 (System Default)" if account['CountryCode'] == 0 else account['CountryCode'])
+  print("\tAccount active".ljust(30), b2s(account['WhichFields'] & samr.USER_ACCOUNT_DISABLED == samr.USER_ACCOUNT_DISABLED))
+  print("\tAccount expires".ljust(30), getTimeString(account['AccountExpires']))
+  print('')
+  print("\tPassword last set".ljust(30), getTimeString(account['PasswordLastSet']))
+  print("\tPassword expires".ljust(30), getTimeString(account['PasswordMustChange']))
+  print("\tPassword changeable".ljust(30), getTimeString(account['PasswordCanChange']))
+  print("\tPassword required".ljust(30), b2s(account['WhichFields'] & samr.USER_PASSWORD_NOT_REQUIRED == samr.USER_PASSWORD_NOT_REQUIRED))
+  print("\tUser may change password".ljust(30), b2s(account['WhichFields'] & samr.UF_PASSWD_CANT_CHANGE == samr.UF_PASSWD_CANT_CHANGE))
+  print('')
+  print("\tWorkstations allowed".ljust(30), "All" if not account['WorkStations'] else account['WorkStations'])
+  print("\tLogon script".ljust(30), account['ScriptPath'])
+  print("\tUser profile".ljust(30), account['ProfilePath'])
+  print("\tHome directory".ljust(30), account['HomeDirectory'])
+  print("\tLast logon".ljust(30), getTimeString(account['LastLogon']))
+  print("\tLogon count".ljust(30), account['LogonCount'])
+  print('')
+  print("\tLogon hours allowed".ljust(30), formatLogonHours(account['LogonHours']['LogonHours']))
+  print('')
+  print("\tLocal Group Memberships")
+  for group in account['LocalGroups']:
+      print("\t\t* {}".format(group))
+  print('')
+  print("\tGlobal Group memberships")
+  for group in account['GlobalGroups']:
+      print("\t\t* {}".format(group))
+
+def netCMD(ip, user, pwd, domain, lmhash, nthash, aesKey, netCMD, unauthTransport = False, unauthBinding = False, alternateBinding = None, alternateInterface = None):
   ###
-  # Does not require administrative rights
+  # Require administrative rights for Windows 10, version 1607 (or later) non-domain controller
+  # Does not require administrative rights for others
+  # https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-10/security/threat-protection/security-policy-settings/network-access-restrict-clients-allowed-to-make-remote-sam-calls
   ###
   
-  print("[+] Enumerating local group members")
-
   try:
     # Connect to the interface
     if alternateBinding == None:
@@ -1582,45 +1807,273 @@ def getLocalGroupMembers(ip, user, pwd, domain, lmhash, nthash, aesKey, groupRID
       rpctransport.set_credentials(user, pwd, domain, lmhash, nthash, aesKey)
     dce = rpctransport.get_dce_rpc()
     dce.connect()
-    dce.bind(uuid.uuidtup_to_bin(('12345778-1234-ABCD-EF00-0123456789AC', '1.0')))
+    if alternateInterface == None:
+      dce.bind(uuid.uuidtup_to_bin(('12345778-1234-ABCD-EF00-0123456789AC', '1.0')))
+    else:
+      dce.bind(uuid.uuidtup_to_bin(tuple(alternateInterface.split(":"))))
 
     # Query methods of the interface
-    SIDs = []
-    res = samr.hSamrConnect(dce)
-    serverHandle = res['ServerHandle']
-
-    # Query the builtin domain (derived from this SID)
-    sid = RPC_SID()
-    sid.fromCanonical('S-1-5-32')
-
-    # Open a handle to this domain
-    res = samr.hSamrOpenDomain(dce, serverHandle = serverHandle, desiredAccess = samr.DOMAIN_LOOKUP | samr.MAXIMUM_ALLOWED, domainId = sid)
-    domainHandle = res['DomainHandle']
-    try:
-      res = samr.hSamrOpenAlias(dce, domainHandle, desiredAccess = samr.ALIAS_LIST_MEMBERS | samr.MAXIMUM_ALLOWED, aliasId = groupRID)
-    except samr.DCERPCSessionError as e:
-      # Local group does not exist
-      if 'STATUS_NO_SUCH_ALIAS' in str(e):
-        print('\t[-] No local group with RID %d exists' % groupRID)
-        return
-    res = samr.hSamrGetMembersInAlias(dce, aliasHandle = res['AliasHandle'])
-    for member in res['Members']['Sids']:
-      SIDString = member['SidPointer'].formatCanonical()
-      SIDs.append(SIDString)
-
-    originalSTDOUT = sys.stdout
-    sys.stdout = StringIO()
-    names = []
-    for SIDString in SIDs:
-      names.append(SIDToName(ip, user, pwd, domain, lmhash, nthash, aesKey, SIDString)) # Use LSARPC interface to resolve SIDs
-    sys.stdout = originalSTDOUT
-    for name in names:
-      print(f"\t{name}")
+    keys = extractKeys(netCMD)
+    ACTION = keys[0]
+    if ACTION == "user":
+      queryAccounts(dce, ip, "User", keys[1:])
+    elif ACTION == "computer":
+      queryAccounts(dce, ip, "Computer", keys[1:])
+    elif ACTION == "group":
+      queryGroups(dce, ip, user, pwd, domain, lmhash, nthash, aesKey, "Group", keys[1:])
+    elif ACTION == "localgroup":
+      queryGroups(dce, ip, user, pwd, domain, lmhash, nthash, aesKey, "Aliases", keys[1:])
+    else:
+      print("[-] Unknown NET action '%s'" % ACTION)
   except Exception as e:
     if (str(e).find("rpc_s_access_denied") != -1):
       print(f"\t[-] Access denied")
     else:
       print(f"\t[-] Got error: {str(e)}")
+
+def queryAccounts(dce, ip, accountType, keys):
+  lenKeys = len(keys)
+  if (lenKeys == 0):
+    # Enumerate all accounts
+    print(f"[+] {accountType} accounts for \\\\{ip}")
+    domainHandle = openDomain(dce)
+    if accountType == "User":
+      res = samr.hSamrEnumerateUsersInDomain(dce, domainHandle, samr.USER_NORMAL_ACCOUNT)
+    else:
+      res = samr.hSamrEnumerateUsersInDomain(dce, domainHandle, samr.USER_WORKSTATION_TRUST_ACCOUNT | samr.USER_SERVER_TRUST_ACCOUNT)
+    for entry in res['Buffer']['Buffer']:
+      print(f"\t{entry['Name']} - {entry['RelativeId']}")
+  else:
+    if (lenKeys == 1):
+      # Display an account
+      accountName = keys[0]
+      print(f"[+] {accountType} account '{accountName}' for \\\\{ip}")
+      domainHandle = openDomain(dce)
+      accountHandle = openUser(dce, domainHandle, accountName)
+      res = samr.hSamrQueryInformationUser2(dce, accountHandle, samr.USER_INFORMATION_CLASS.UserAllInformation)
+      account = res['Buffer']['All']
+      sidArray = samr.SAMPR_PSID_ARRAY()
+      groups = samr.hSamrGetGroupsForUser(dce, accountHandle)['Groups']['Groups']
+      groupRIDs = list(map(lambda g: g['RelativeId'], groups))
+      for group in groups:
+        groupRID = group['RelativeId']
+        groupHandle = samr.hSamrOpenGroup(dce, domainHandle, groupId = groupRID)['GroupHandle']
+        groupSID = samr.hSamrRidToSid(dce, groupHandle, groupRID)['Sid']
+        si = samr.PSAMPR_SID_INFORMATION()
+        si['SidPointer'] = groupSID
+        sidArray['Sids'].append(si)
+      globalGroups = samr.hSamrLookupIdsInDomain(dce, domainHandle, groupRIDs)
+      account.fields['GlobalGroups'] = list(map(lambda a: a['Data'], globalGroups['Names']['Element']))
+      domainHandle = openDomain(dce, True)
+      aliasMembership = samr.hSamrGetAliasMembership(dce, domainHandle, sidArray)
+      aliasIDs = list(map(lambda a: a['Data'], aliasMembership['Membership']['Element']))
+      localGroups = samr.hSamrLookupIdsInDomain(dce, domainHandle, aliasIDs)
+      account.fields['LocalGroups'] = list(map(lambda a: a['Data'], localGroups['Names']['Element']))
+      displayAccount(account)
+    else:
+      if (lenKeys == 2):
+        # Delete an account
+        accountName = keys[0]
+        print(f"[+] Deleting {accountType.lower()} account '{accountName}'")
+        domainHandle = openDomain(dce)
+        accountHandle = openUser(dce, domainHandle, accountName)
+        samr.hSamrDeleteUser(dce, accountHandle)
+        print("\t[+] Account successfully deleted")
+      else:
+        if (lenKeys == 3):
+          # Create an account
+          accountName = keys[0]
+          print(f"[+] Creating {accountType.lower()} account '{accountName}'")
+          domainHandle = openDomain(dce)
+          b64Pwd, NT = keys[1].split(":")
+          # New created account will be disabled in most cases
+          # And the account will have the USER_FORCE_PASSWORD_CHANGE flag
+          # https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-samr/a98d7fbb-1735-4fbf-b41a-ef363c899002
+          # Thus, after created the account, set the userAccountControl attribute with SamrSetInformationUser2()
+          if accountType == "User":
+            samr.hSamrCreateUser2InDomain(dce, domainHandle, accountName, samr.USER_NORMAL_ACCOUNT)
+          else:
+            samr.hSamrCreateUser2InDomain(dce, domainHandle, accountName, samr.USER_WORKSTATION_TRUST_ACCOUNT)
+          try:
+            buffer = samr.SAMPR_USER_INFO_BUFFER()
+            buffer['tag'] = samr.USER_INFORMATION_CLASS.UserControlInformation
+            if accountType == "User":
+              buffer['Control']['UserAccountControl'] = samr.USER_NORMAL_ACCOUNT | samr.USER_DONT_EXPIRE_PASSWORD # https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-samr/b10cfda1-f24f-441b-8f43-80cb93e786ec
+            else:
+              buffer['Control']['UserAccountControl'] = samr.USER_WORKSTATION_TRUST_ACCOUNT | samr.USER_DONT_EXPIRE_PASSWORD # https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-samr/b10cfda1-f24f-441b-8f43-80cb93e786ec
+            accountRID = samr.hSamrLookupNamesInDomain(dce, domainHandle, [accountName])['RelativeIds']['Element'][0]['Data']
+            accountHandle = samr.hSamrOpenUser(dce, domainHandle, userId = accountRID)['UserHandle']
+            samr.hSamrSetNTInternal1(dce, accountHandle, base64.b64decode(b64Pwd).decode(), NT)
+            samr.hSamrSetInformationUser2(dce, accountHandle, buffer)
+            print("\t[+] Account sucessfully created")
+          except Exception as e:
+            if (str(e).find("rpc_s_access_denied") != -1):
+              print(f"\t[-] Access denied")
+            else:
+              print(f"\t[-] Got error: {str(e)}")
+            try:
+              accountRID = samr.hSamrLookupNamesInDomain(dce, domainHandle, [accountName])['RelativeIds']['Element'][0]['Data']
+              accountHandle = samr.hSamrOpenUser(dce, domainHandle, userId = accountRID)['UserHandle']
+              samr.hSamrDeleteUser(dce, accountHandle)
+            except:
+              pass
+        else:
+          if (lenKeys > 5):
+            print("\t[-] Invalid cmd: net %s" % (" ".join(keys)))
+          else:
+            # Set user password
+            accountName = keys[0]
+            print(f"[+] Editing {accountType.lower()} account '{accountName}' password")
+            domainHandle = openDomain(dce)
+            accountHandle = openUser(dce, domainHandle, accountName)
+            b64CurrentPwd, b64NewPwd = keys[1].split(":")
+            currentLM, newLM = keys[2].split(":")
+            currentNT, newNT = keys[3].split(":")
+            if (lenKeys == 5):
+              injectSAM = True
+            else:
+              injectSAM = False
+            if b64NewPwd != '':
+              if b64CurrentPwd == '' and currentNT == '':
+                print(f"\t[-] Current {accountType.lower()} pwd or NT hash required")
+              else:
+                samr.hSamrUnicodeChangePasswordUser2(dce, "\x00", accountName, base64.b64decode(b64CurrentPwd).decode(), base64.b64decode(b64NewPwd).decode(), '', currentNT)
+            elif newNT != '':
+              if injectSAM: # Require administrative rights. Allow to bypass password history policy
+                samr.hSamrSetNTInternal1(dce, accountHandle, '', newNT)
+              else:
+                if (newLM != '') and (b64CurrentPwd != '' or currentNT != ''):
+                  samr.hSamrChangePasswordUser(dce, accountHandle, base64.b64decode(b64CurrentPwd).decode(), '', currentNT, newLM, newNT) # User will have to change his pwd at next logon
+                else:
+                  print(f"\t[-] New {accountType.lower()} LM hash AND current {accountType.lower()} pwd or NT hash required")
+            else:
+              print(f"\t[-] New {accountType.lower()} pwd or NT hash required")
+            print("\t[+] Account password successfully edited")
+
+def queryGroups(dce, ip, user, pwd, domain, lmhash, nthash, aesKey, groupType, keys):
+  lenKeys = len(keys)
+  if (lenKeys == 0):
+    # Enumerate all groups
+    print(f"[+] {groupType} accounts for \\\\{ip}")
+    if groupType == "Group":
+      domainHandle = openDomain(dce)
+      res = samr.hSamrEnumerateGroupsInDomain(dce, domainHandle)
+    else:
+      domainHandle = openDomain(dce, True)
+      res = samr.hSamrEnumerateAliasesInDomain(dce, domainHandle)
+    for entry in res['Buffer']['Buffer']:
+      print(f"\t{entry['Name']} - {entry['RelativeId']}")
+  else:
+    if (lenKeys == 1):
+      # Query a group
+      groupName = keys[0]
+      print(f"[+] Listing members of {groupType.lower()} '{groupName}'")
+      if groupType == "Group":
+        domainHandle = openDomain(dce)
+        groupHandle = openGroup(dce, domainHandle, groupName)
+        res = samr.hSamrQueryInformationGroup(dce, groupHandle, samr.GROUP_INFORMATION_CLASS.GroupGeneralInformation)['Buffer']['General']
+        groupComment = res['AdminComment']
+        print("\tGroup name".ljust(30), groupName)
+        print("\tComment".ljust(30), groupComment)
+        print("\tMembers")
+        membersRIDs = samr.hSamrGetMembersInGroup(dce, groupHandle)
+        membersNames = samr.hSamrLookupIdsInDomain(dce, domainHandle, list(map(lambda a: a['Data'], membersRIDs['Members']['Members'])))
+        for entry in membersNames['Names']['Element']:
+          memberName = entry['Data']
+          print("\t".ljust(30), memberName)
+      else:
+        domainHandle = openDomain(dce, True)
+        aliasName = keys[0]
+        aliasHandle = openAlias(dce, domainHandle, aliasName)
+        res = samr.hSamrQueryInformationAlias(dce, aliasHandle, samr.ALIAS_INFORMATION_CLASS.AliasGeneralInformation)['Buffer']['General']
+        aliasComment = res['AdminComment']
+        print("\tAlias name".ljust(30), aliasName)
+        print("\tComment".ljust(30), aliasComment)
+        print("\tMembers")
+        res = samr.hSamrGetMembersInAlias(dce, aliasHandle)
+        for member in res['Members']['Sids']:
+          SIDString = member['SidPointer'].formatCanonical()
+          originalSTDOUT = sys.stdout
+          sys.stdout = StringIO()
+          memberName = SIDToName(ip, user, pwd, domain, lmhash, nthash, aesKey, SIDString) # Use LSARPC interface to resolve SIDs
+          sys.stdout = originalSTDOUT
+          print("\t".ljust(30), memberName)
+    else:
+      if (lenKeys == 2):
+        if keys[1] == "/add":
+          # Create a group
+          groupName = keys[0]
+          print(f"[+] Creating {groupType.lower()} '{groupName}'")
+          if groupType == "Group":
+            domainHandle = openDomain(dce)
+            samr.hSamrCreateGroupInDomain(dce, domainHandle, groupName)
+          else:
+            domainHandle = openDomain(dce, True)
+            aliasName = keys[0]
+            samr.hSamrCreateAliasInDomain(dce, domainHandle, aliasName)
+          print(f"\t[+] {groupType} successfully created")
+        elif keys[1] == "/del":
+          # Delete a group
+          groupName = keys[0]
+          print(f"[+] Deleting {groupType.lower()} '{groupName}'")
+          if groupType == "Group":
+            domainHandle = openDomain(dce)
+            groupHandle = openGroup(dce, domainHandle, groupName)
+            samr.hSamrDeleteGroup(dce, groupHandle)
+          else:
+            domainHandle = openDomain(dce, True)
+            aliasName = keys[0]
+            aliasHandle = openAlias(dce, domainHandle, aliasName)
+            samr.hSamrDeleteAlias(dce, aliasHandle)
+          print(f"\t[+] {groupType} successfully deleted")
+        else:
+          print("\t[-] Invalid cmd: net %s" % (" ".join(keys)))
+      else:
+        if (lenKeys == 3):
+          if keys[2] == "/add":
+            # Add account to group
+            groupName = keys[0]
+            accountName = keys[1]
+            print(f"[+] Adding account '{accountName}' to '{groupName}'")
+            if groupType == "Group":
+              domainHandle = openDomain(dce)
+              groupHandle = openGroup(dce, domainHandle, groupName)
+              accountRID = samr.hSamrLookupNamesInDomain(dce, domainHandle, [accountName])['RelativeIds']['Element'][0]['Data']
+              samr.hSamrAddMemberToGroup(dce, groupHandle, accountRID, samr.SE_GROUP_ENABLED_BY_DEFAULT)
+            else:
+              domainHandle = openDomain(dce, True)
+              aliasName = keys[0]
+              aliasHandle = openAlias(dce, domainHandle, aliasName)
+              originalSTDOUT = sys.stdout
+              sys.stdout = StringIO()
+              accountSID = NameToSID2(ip, user, pwd, domain, lmhash, nthash, aesKey, accountName) # Use LSARPC interface to resolve name
+              sys.stdout = originalSTDOUT
+              samr.hSamrAddMemberToAlias(dce, aliasHandle, accountSID)
+            print("\t[+] Account successfully added")
+          elif keys[2] == "/del":
+            # Remove account from group
+            groupName = keys[0]
+            accountName = keys[1]
+            print(f"[+] Removing account '{accountName}' from '{groupName}'")
+            if groupType == "Group":
+              domainHandle = openDomain(dce)
+              groupHandle = openGroup(dce, domainHandle, groupName)
+              accountRID = samr.hSamrLookupNamesInDomain(dce, domainHandle, [accountName])['RelativeIds']['Element'][0]['Data']
+              samr.hSamrRemoveMemberFromGroup(dce, groupHandle, accountRID)
+            else:
+              domainHandle = openDomain(dce, True)
+              aliasName = keys[0]
+              aliasHandle = openAlias(dce, domainHandle, aliasName)
+              originalSTDOUT = sys.stdout
+              sys.stdout = StringIO()
+              accountSID = NameToSID2(ip, user, pwd, domain, lmhash, nthash, aesKey, accountName) # Use LSARPC interface to resolve name
+              sys.stdout = originalSTDOUT
+              samr.hSamrRemoveMemberFromAlias(dce, aliasHandle, accountSID)
+            print("\t[+] Account successfully removed")
+          else:
+            print("\t[-] Invalid cmd: net %s" % (" ".join(keys)))
+        else:
+          print("\t[-] Invalid cmd: net %s" % (" ".join(keys)))
 
 ############
 ### MAIN ###
@@ -1633,11 +2086,12 @@ if __name__ == "__main__":
   auth_group.add_argument("--ip", help = "Target IP", required = True)
   auth_group.add_argument("--username", help = "Username for authentication")
   auth_group.add_argument("--password", help = "Password for authentication")
-  auth_group.add_argument("--domain", help = "Domain for authentication")
+  auth_group.add_argument("--domain", help = "Domain for authentication (Hostname for local authentication)")
   auth_group.add_argument("--lmHash", help = "LM Hash for NTLM authentication", default = "")
   auth_group.add_argument("--ntHash", help = "NT Hash for NTLM authentication", default = "")
   auth_group.add_argument("--aesKey", help = "AES 128/256 key for Kerberos authentication", default = "")
   auth_group.add_argument("--alternateBinding", help = "Alternate String Binding to access RPC interface")
+  auth_group.add_argument("--alternateInterface", help = "Alternate RPC interface in the form of <UUID>:<Version>")
   auth_group.add_argument("--unauthTransport", help = "Do not authenticate through transport protocol", action = "store_true")
   auth_group.add_argument("--unauthBinding", help = "Do not authenticate through binding", action = "store_true")
 
@@ -1677,14 +2131,37 @@ if __name__ == "__main__":
       delete '<KeyName>' /v '<EntryName>'|/ve|/va
       save '<KeyName>' '<RemoteOutputPath>\'''')
   msrrp_group.add_argument("--listRegSessions", help = "List remote sessions through WINREG interface by querying HKU\<SID>", action = "store_true")
+  msrrp_group.add_argument("--listRegSD", help = "List remote registries Security Descriptor through WINREG interface", choices = ["HKLM", "HKCU", "HKCR", "HKU", "HKCC"])
 
   mslsatlsad_group = parser.add_argument_group('[MS-LSAT]/[MS-LSAD] Local Security Authority (Translation Methods/Domain Policy) Remote Protocol options')
   mslsatlsad_group.add_argument("--SIDToName", help = "Lookup name of provided SID through LSARPC interface")
   mslsatlsad_group.add_argument("--NameToSID", help = "Lookup SID of provided SAM Account Name through LSARPC interface")
 
   mssamr_group = parser.add_argument_group('[MS-SAMR] Security Account Manager (SAM) Remote Protocol (Client-to-Server) options')
-  mssamr_group.add_argument("--getLocalGroupMembers", help = "RID of local group to list members through SAMR interface (544 = Administrators, 555 = Remote Desktop Users, 562 = Distributed COM Users, 580 = Remote Management Users)", type = int)
-
+  mssamr_group.add_argument("--netCMD", help = '''Net cmd through SAMR interface in the form of:
+      user
+      user '<UserName>'
+      user '<UserName>' /del
+      user '<UserName>' [<B64Pwd>]:[<NT>] /add
+      user '<UserName>' [<B64CurrentPwd>]:[<B64NewPwd>] [<CurrentLM>:<NewLM>] [<CurrentNT>:<NewNT>] [/injectSAM]
+      computer
+      computer '<ComputerName>'
+      computer '<ComputerName>' /del
+      computer '<ComputerName>' [<B64Pwd>]:[<NT>] /add
+      computer '<ComputerName>' [<B64CurrentPwd>]:[<B64NewPwd>] [<CurrentLM>:<NewLM>] [<CurrentNT>:<NewNT>] [/injectSAM]
+      group
+      group '<GroupName>'
+      group '<GroupName>' /del
+      group '<GroupName>' /add
+      group '<GroupName>' '<UserName>' /add
+      group '<GroupName>' '<UserName>' /del
+      localgroup
+      localgroup '<GroupName>'
+      localgroup '<GroupName>' /del
+      localgroup '<GroupName>' /add
+      localgroup '<GroupName>' '<UserName>' /add
+      localgroup '<GroupName>' '<UserName>' /del''')
+  
   args = parser.parse_args()
 
   if (args.listEndpoints):
@@ -1694,17 +2171,17 @@ if __name__ == "__main__":
   if (args.getOSArch):
     getOSArch(args.ip)
   if (args.cmdSVCCTL != None):
-    RCESVCCTL(args.ip, args.username, args.password, args.domain, args.lmHash, args.ntHash, args.aesKey, args.cmdSVCCTL, args.unauthTransport, args.unauthBinding, args.alternateBinding)
+    RCESVCCTL(args.ip, args.username, args.password, args.domain, args.lmHash, args.ntHash, args.aesKey, args.cmdSVCCTL, args.unauthTransport, args.unauthBinding, args.alternateBinding, args.alternateInterface)
   if (args.startService != None):
-    startService(args.ip, args.username, args.password, args.domain, args.lmHash, args.ntHash, args.aesKey, args.startService, args.unauthTransport, args.unauthBinding, args.alternateBinding)
+    startService(args.ip, args.username, args.password, args.domain, args.lmHash, args.ntHash, args.aesKey, args.startService, args.unauthTransport, args.unauthBinding, args.alternateBinding, args.alternateInterface)
   if (args.listServices):
-    listServices(args.ip, args.username, args.password, args.domain, args.lmHash, args.ntHash, args.aesKey, args.unauthTransport, args.unauthBinding, args.alternateBinding)
+    listServices(args.ip, args.username, args.password, args.domain, args.lmHash, args.ntHash, args.aesKey, args.unauthTransport, args.unauthBinding, args.alternateBinding, args.alternateInterface)
   if (args.cmdITaskSchedulerService != None):
-    RCEITaskSchedulerService(args.ip, args.username, args.password, args.domain, args.lmHash, args.ntHash, args.aesKey, args.cmdITaskSchedulerService, args.unauthTransport, args.unauthBinding, args.alternateBinding)
+    RCEITaskSchedulerService(args.ip, args.username, args.password, args.domain, args.lmHash, args.ntHash, args.aesKey, args.cmdITaskSchedulerService, args.unauthTransport, args.unauthBinding, args.alternateBinding, args.alternateInterface)
   if (args.listScheduledTasks):
-    listScheduledTasks(args.ip, args.username, args.password, args.domain, args.lmHash, args.ntHash, args.aesKey, args.unauthTransport, args.unauthBinding, args.alternateBinding)
+    listScheduledTasks(args.ip, args.username, args.password, args.domain, args.lmHash, args.ntHash, args.aesKey, args.unauthTransport, args.unauthBinding, args.alternateBinding, args.alternateInterface)
   if (args.cmdATSVC != None):
-    RCEATSVC(args.ip, args.username, args.password, args.domain, args.lmHash, args.ntHash, args.aesKey, args.cmdATSVC, args.unauthTransport, args.unauthBinding, args.alternateBinding)
+    RCEATSVC(args.ip, args.username, args.password, args.domain, args.lmHash, args.ntHash, args.aesKey, args.cmdATSVC, args.unauthTransport, args.unauthBinding, args.alternateBinding, args.alternateInterface)
   if (args.cmdDCOM1 != None):
     RCEDCOM1(args.ip, args.username, args.password, args.domain, args.lmHash, args.ntHash, args.aesKey, args.cmdDCOM1, args.unauthTransport, args.unauthBinding)
   if (args.cmdDCOM2 != None):
@@ -1712,18 +2189,20 @@ if __name__ == "__main__":
   if (args.listRDSSessions):
     listRDSSessions(args.ip, args.username, args.password, args.domain, args.lmHash, args.ntHash, args.aesKey, args.unauthTransport, args.unauthBinding, args.alternateBinding)
   if (args.listProcesses):
-    listProcesses(args.ip, args.username, args.password, args.domain, args.lmHash, args.ntHash, args.aesKey, args.unauthTransport, args.unauthBinding, args.alternateBinding)
+    listProcesses(args.ip, args.username, args.password, args.domain, args.lmHash, args.ntHash, args.aesKey, args.unauthTransport, args.unauthBinding, args.alternateBinding, args.alternateInterface)
   if (args.listSessions):
-    listSessions(args.ip, args.username, args.password, args.domain, args.lmHash, args.ntHash, args.aesKey, args.unauthTransport, args.unauthBinding, args.alternateBinding)
+    listSessions(args.ip, args.username, args.password, args.domain, args.lmHash, args.ntHash, args.aesKey, args.unauthTransport, args.unauthBinding, args.alternateBinding, args.alternateInterface)
   if (args.listLoggedIn):
-    listLoggedIn(args.ip, args.username, args.password, args.domain, args.lmHash, args.ntHash, args.aesKey, args.unauthTransport, args.unauthBinding, args.alternateBinding)
+    listLoggedIn(args.ip, args.username, args.password, args.domain, args.lmHash, args.ntHash, args.aesKey, args.unauthTransport, args.unauthBinding, args.alternateBinding, args.alternateInterface)
   if (args.regCMD != None):
-    regCTL(args.ip, args.username, args.password, args.domain, args.lmHash, args.ntHash, args.aesKey, args.regCMD, args.unauthTransport, args.unauthBinding, args.alternateBinding)
+    regCMD(args.ip, args.username, args.password, args.domain, args.lmHash, args.ntHash, args.aesKey, args.regCMD, args.unauthTransport, args.unauthBinding, args.alternateBinding, args.alternateInterface)
   if (args.listRegSessions):
-    listRegSessions(args.ip, args.username, args.password, args.domain, args.lmHash, args.ntHash, args.aesKey, args.unauthTransport, args.unauthBinding, args.alternateBinding)
+    listRegSessions(args.ip, args.username, args.password, args.domain, args.lmHash, args.ntHash, args.aesKey, args.unauthTransport, args.unauthBinding, args.alternateBinding, args.alternateInterface)
+  if (args.listRegSD):
+    listRegSD(args.ip, args.username, args.password, args.domain, args.lmHash, args.ntHash, args.aesKey, args.listRegSD, args.unauthTransport, args.unauthBinding, args.alternateBinding, args.alternateInterface)
   if (args.SIDToName != None):
-    name = SIDToName(args.ip, args.username, args.password, args.domain, args.lmHash, args.ntHash, args.aesKey, args.SIDToName, args.unauthTransport, args.unauthBinding, args.alternateBinding)
+    name = SIDToName(args.ip, args.username, args.password, args.domain, args.lmHash, args.ntHash, args.aesKey, args.SIDToName, args.unauthTransport, args.unauthBinding, args.alternateBinding, args.alternateInterface)
   if (args.NameToSID != None):
-    sid = NameToSID(args.ip, args.username, args.password, args.domain, args.lmHash, args.ntHash, args.aesKey, args.NameToSID, args.unauthTransport, args.unauthBinding, args.alternateBinding)
-  if (args.getLocalGroupMembers != None):
-    getLocalGroupMembers(args.ip, args.username, args.password, args.domain, args.lmHash, args.ntHash, args.aesKey, args.getLocalGroupMembers, args.unauthTransport, args.unauthBinding, args.alternateBinding)
+    sid = NameToSID(args.ip, args.username, args.password, args.domain, args.lmHash, args.ntHash, args.aesKey, args.NameToSID, args.unauthTransport, args.unauthBinding, args.alternateBinding, args.alternateInterface)
+  if (args.netCMD != None):
+    netCMD(args.ip, args.username, args.password, args.domain, args.lmHash, args.ntHash, args.aesKey, args.netCMD, args.unauthTransport, args.unauthBinding, args.alternateBinding, args.alternateInterface)
